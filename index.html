@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宜蘭買房物件地圖 (真實地圖版)</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 380px;
+            height: 100%;
+            background: #f8f9fa;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+
+        .header {
+            padding: 20px;
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .property-list {
+            padding: 15px;
+            flex: 1;
+        }
+
+        .property-card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            cursor: pointer;
+            border-left: 4px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .property-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .property-card.active {
+            border-left-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .badge-new { background: #d4edda; color: #155724; }
+        .badge-rejected { background: #f8d7da; color: #721c24; }
+        .badge-interested { background: #fff3cd; color: #856404; }
+
+        .card-title {
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .card-price {
+            color: #e53e3e;
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+
+        .card-details {
+            font-size: 0.85rem;
+            color: #4a5568;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+
+        .transport-info {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 0.8rem;
+            color: #718096;
+        }
+
+        .transport-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+
+        /* Marker Custom Styles */
+        .custom-div-icon {
+            background: transparent;
+            border: none;
+        }
+        
+        .marker-pin {
+            width: 30px;
+            height: 30px;
+            border-radius: 50% 50% 50% 0;
+            background: #667eea;
+            position: absolute;
+            transform: rotate(-45deg);
+            left: 50%;
+            top: 50%;
+            margin: -15px 0 0 -15px;
+            box-shadow: 0 3px 5px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .marker-pin::after {
+            content: '';
+            width: 14px;
+            height: 14px;
+            margin: 0; /* manually centered */
+            background: #fff;
+            border-radius: 50%;
+            transform: rotate(45deg); /* counteract parent rotation */
+        }
+
+        .marker-icon-text {
+            position: absolute;
+            transform: rotate(45deg);
+            font-size: 10px;
+            font-weight: bold;
+            color: #667eea;
+            z-index: 10;
+            margin-left: 8px; /* Adjustment for visual center */
+            margin-bottom: 8px; /* Adjustment for visual center */
+        }
+
+        .marker-rejected .marker-pin { background: #A0AEC0; }
+        .marker-rejected .marker-icon-text { color: #A0AEC0; }
+        
+        .marker-interested .marker-pin { background: #48BB78; }
+        .marker-interested .marker-icon-text { color: #48BB78; }
+        
+        .marker-new .marker-pin { background: #E53E3E; }
+        .marker-new .marker-icon-text { color: #E53E3E; }
+
+        /* Expandable Details Styles */
+        .details-toggle {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+            background: #edf2f7;
+            border: 1px solid #e2e8f0;
+            border-radius: 5px;
+            color: #4a5568;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .details-toggle:hover {
+            background: #e2e8f0;
+        }
+
+        .details-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            background: #fff;
+            margin-top: 0;
+            font-size: 0.85rem;
+        }
+
+        .details-content.expanded {
+            max-height: 1000px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #cbd5e0;
+        }
+
+        .spec-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .spec-item {
+            background: #f7fafc;
+            padding: 5px 8px;
+            border-radius: 4px;
+            border: 1px solid #edf2f7;
+        }
+
+        .spec-label {
+            font-size: 0.7rem;
+            color: #718096;
+            display: block;
+        }
+
+        .spec-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            margin-bottom: 4px;
+            padding-left: 18px;
+            position: relative;
+            color: #4a5568;
+        }
+
+        .feature-list li::before {
+            content: '✅';
+            position: absolute;
+            left: 0;
+            font-size: 0.8rem;
+        }
+
+        /* 設施標記動畫 */
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.08);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .facility-icon {
+            background: transparent !important;
+            border: none !important;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="header">
+        <h1>🏡 宜蘭找房地圖</h1>
+        <p>點擊列表或地圖標記查看詳情</p>
+    </div>
+    <div class="property-list" id="propertyList">
+        <!-- Javascript will populate this -->
+    </div>
+</div>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+    // 1. 初始化地圖
+    //設定中心點為冬山/羅東交界處
+    const map = L.map('map').setView([24.6400, 121.7800], 13); 
+
+    // 2. 添加地圖圖層 (OpenStreetMap)
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // 3. 設施資料庫 (交通節點)
+    const facilities = {
+        train: [
+            { name: "宜蘭火車站", lat: 24.7576, lng: 121.7533, type: "train", icon: "🚂" },
+            { name: "羅東火車站", lat: 24.6770, lng: 121.7706, type: "train", icon: "🚂" },
+            { name: "冬山火車站", lat: 24.6366, lng: 121.7925, type: "train", icon: "🚂" },
+            { name: "蘇澳新站", lat: 24.6067, lng: 121.8300, type: "train", icon: "🚂" },
+            { name: "蘇澳火車站", lat: 24.5936, lng: 121.8504, type: "train", icon: "🚂" }
+        ],
+        hsr: [
+             { name: "宜蘭高鐵站 (預定)", lat: 24.7474, lng: 121.7592, type: "hsr", icon: "🚄" }
+        ],
+        highway: [
+            { name: "國五 羅東交流道", lat: 24.6850, lng: 121.7900, type: "highway", icon: "🛣️" },
+            { name: "國五 壯圍/宜蘭交流道", lat: 24.7663, lng: 121.7820, type: "highway", icon: "🛣️" },
+            { name: "國五 蘇澳交流道", lat: 24.5940, lng: 121.8380, type: "highway", icon: "🛣️" }
+        ],
+        bus: [
+            { name: "羅東轉運站", lat: 24.6780, lng: 121.7750, type: "bus", icon: "🚌" },
+            { name: "冬山鄉公所站", lat: 24.6340, lng: 121.7880, type: "bus", icon: "🚌" },
+            { name: "蘇澳轉運站", lat: 24.5930, lng: 121.8500, type: "bus", icon: "🚌" }
+        ]
+    };
+
+    // 關鍵地點 (台北/花蓮)
+    const longDistanceTargets = {
+        taipei: { lat: 25.0330, lng: 121.5654, name: "台北101" },
+        hualien: { lat: 23.9872, lng: 121.6011, name: "花蓮某處" }
+    };
+
+    // 4. 物件資料庫
+    const properties = [
+        {
+            id: 'zhuangwei_zhongxing',
+            name: '壯圍中興五路透天',
+            price: 728,
+            lat: 24.7597,
+            lng: 121.7544,
+            status: 'new',
+            address: '宜蘭縣壯圍鄉中興五路50巷2號',
+            note: '裝潢美、1樓孝親房、近國五',
+            url: 'https://www.facebook.com/share/p/17yfurPazo/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-3樓' },
+                    { label: '格局', value: '4房2廳2衛' },
+                    { label: '屋齡', value: '約29年' },
+                    { label: '建坪', value: '53.25坪' },
+                    { label: '地坪', value: '37.55坪' }
+                ],
+                features: [
+                    '近高鐵站預定地與國五交流道',
+                    '高質感裝潢，採光通風佳',
+                    '1樓孝親房設計，適合三代同堂',
+                    '低總價入手透天，比買大樓划算',
+                    '聯絡人①：宏智 0905-288-062',
+                    '聯絡人②：簡坤億 0901-008-838 (永慶)'
+                ]
+            }
+        },
+        {
+            id: 'xiaocheng',
+            name: '小城故事',
+            price: 1500,
+            lat: 24.6400,
+            lng: 121.7800,
+            status: 'interested',
+            address: '待確認 (預估位置)',
+            note: '待確認: 工廠/空地問題',
+            url: 'https://www.google.com/search?q=宜蘭各房仲+小城故事+建案',
+            image: null
+        },
+        {
+            id: 'luodong_zhongshan',
+            name: '羅東中山路透天',
+            price: 828,
+            lat: 24.6785,
+            lng: 121.7650,
+            status: 'new',
+            address: '宜蘭縣羅東鎮中山路一段168巷',
+            note: '國五2分鐘、近羅東後站商圈、親水公園',
+            url: 'https://www.facebook.com/share/p/1bPQacwtyH/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '共四樓（整棟）' },
+                    { label: '格局', value: '5房2廳4衛' },
+                    { label: '屋齡', value: '約30年' },
+                    { label: '建坪', value: '47.15坪' },
+                    { label: '地坪', value: '25.5坪' },
+                    { label: '朝向', value: '坐東朝西' }
+                ],
+                features: [
+                    '正羅東中山路門牌，近國五交流道',
+                    '2分鐘接國五，通勤南北零煩惱',
+                    '生活圈：五結市區、羅東後站商圈',
+                    '鄰近親水公園，休閒生活一次擁有',
+                    '聯絡人：黃心柔 0931-056-703'
+                ]
+            }
+        },
+        {
+            id: 'dongshan_sanzheng_villa',
+            name: '冬山三正路近國五全新別墅',
+            price: 868,
+            lat: 24.6465,
+            lng: 121.7895,
+            status: 'new',
+            address: '宜蘭縣冬山鄉三正路',
+            note: '總價低、屋齡新、近華德福學校',
+            url: 'https://www.facebook.com/share/p/18LRuFrQvK/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1+2樓別墅' },
+                    { label: '格局', value: '30坪 / 2層' },
+                    { label: '屋齡', value: '8個月 (全新)' }
+                ],
+                features: [
+                    '近國五側車道（南來北往方便）',
+                    '近冬山市區生活圈、華德福學校',
+                    '小型社區，住戶單純',
+                    '每間房都有衛浴概念，前後露臺好利用',
+                    '屋況幾乎全新，低總價、未來好轉手',
+                    '聯絡人：永慶怡婷 0980-044-534'
+                ]
+            }
+        },
+        {
+            id: 'yilan_minquan',
+            name: '宜蘭市近新月透天',
+            price: 598,
+            lat: 24.7570,
+            lng: 121.7530,
+            status: 'new',
+            address: '宜蘭市民權路三段',
+            note: '低總價、近新月、需整理',
+            url: 'https://www.facebook.com/share/p/1FrkLy3Tey/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '3樓' },
+                    { label: '格局', value: '3房3廳3衛' },
+                    { label: '屋齡', value: '47年' },
+                    { label: '建坪', value: '30.6坪' },
+                    { label: '地坪', value: '21.8坪' }
+                ],
+                features: [
+                    '新月廣場只要3分鐘，學區也靠近',
+                    '活巷好出入，門口可停車',
+                    '市場上低總價，可任意改造',
+                    '聯絡人：吳佩珊 0925-032-190'
+                ]
+            }
+        },
+        {
+            id: 'dongshan_yongqing',
+            name: '近羅東帶車庫後花園透天',
+            price: 880,
+            lat: 24.6580,
+            lng: 121.7760,
+            status: 'new',
+            address: '宜蘭縣冬山鄉永清路',
+            note: '後花園罕見、邊間車庫、水電全新',
+            url: 'https://www.facebook.com/share/p/1DQ6Jq7q6f/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-2樓' },
+                    { label: '格局', value: '3房2廳3衛' },
+                    { label: '建坪', value: '40.63坪' },
+                    { label: '地坪', value: '35.11坪' }
+                ],
+                features: [
+                    '自帶後花園，透天罕見配置',
+                    '邊間，浴盤都帶窗，採光佳',
+                    '門前車庫，休旅車沒問題',
+                    '整棟水電重拉過，安全無疑慮',
+                    '活巷好進出',
+                    '聯絡人：泰永森 0917646022 / LINE: sam9611158'
+                ]
+            }
+        },
+        {
+            id: 'yilan_yunshan',
+            name: '宜蘭市雲山村社區電梯大樓',
+            price: 1030,
+            lat: 24.7430,
+            lng: 121.7490,
+            status: 'interested',
+            address: '宜蘭市雲山里（近南屏國小）',
+            note: '6/12樓含車位、三面採光、近新月',
+            url: 'https://www.facebook.com/share/p/1AfaKZPk2U/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '6/12樓 朝西北' },
+                    { label: '格局', value: '3+1房2廳2衛3陽台' },
+                    { label: '屋齡', value: '21年' },
+                    { label: '權狀', value: '54.4坪' },
+                    { label: '室內', value: '30.6坪' },
+                    { label: '車位', value: '地下室平面（贈）' }
+                ],
+                features: [
+                    '三面採光，通風良好',
+                    '廚房及衛浴更新，主臥有浴缸（TOTO）',
+                    '客廳日系訂製電視櫃及投影機平台',
+                    '管理費1400元/月，可出租約1500元/月',
+                    '學區：南屏國小，近壹清店、新月樂福',
+                    '屋主自售，服務費彈性（最多1%）',
+                    '聯絡人：田小姐 0978592804'
+                ]
+            }
+        },
+        {
+            id: 'yuanshan_jingzhai',
+            name: '員山水之鄉輕井澤全新透天',
+            price: 1268,
+            lat: 24.7572,
+            lng: 121.7182,
+            status: 'interested',
+            address: '宜蘭縣員山鄉員山路二段',
+            note: '全新未住、社區型、環境清幽',
+            url: 'https://www.facebook.com/share/p/17xuy8c142/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-3樓/共3樓' },
+                    { label: '格局', value: '3房2廳3衛' },
+                    { label: '屋齡', value: '3年（全新）' },
+                    { label: '建物', value: '42.3坪' },
+                    { label: '土地', value: '30.65坪' }
+                ],
+                features: [
+                    '全新未住，優質屋況',
+                    '社區型透天，環境清幽',
+                    '空氣清新、水源純淨',
+                    '適合新婚族、退休族、自住族群',
+                    '聯絡人：阿綸 0988-037-902（台灣房屋宜蘭陽明成功店）',
+                    'LINE: https://line.me/ti/p/A9GMYhjvva'
+                ]
+            }
+        },
+        {
+            id: 'sanxing_dakeng',
+            name: '三星花園渡假邊間別墅',
+            price: 828,
+            lat: 24.6652,
+            lng: 121.6510,
+            status: 'interested',
+            address: '宜蘭縣三星鄉大坑六路',
+            note: '別墅邊間、環境清幽、屋況新',
+            url: 'https://www.facebook.com/share/p/1D89TsBZLb/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-3樓/共3層' },
+                    { label: '格局', value: '4房2廳5衛' },
+                    { label: '屋齡', value: '9年' },
+                    { label: '建物', value: '38.14坪' },
+                    { label: '土地', value: '30.26坪' },
+                    { label: '座向', value: '坐西南朝東北' }
+                ],
+                features: [
+                    '邊間別墅，室內採光通風良好',
+                    '社區住戶品質高，環境優美安靜',
+                    '鳥語花香，清幽環境',
+                    '開車離羅東運動公園約16分鐘',
+                    '聯絡人：林儀憶 0910-045-884（台灣房屋羅東公正店）'
+                ]
+            }
+        },
+        {
+            id: 'dongshan_longxiang',
+            name: '龍祥幸福居（預售案）',
+            price: 777,
+            lat: 24.6480,
+            lng: 121.7880,
+            status: 'new',
+            address: '宜蘭縣冬山鄉龍祥三路3巷',
+            note: '預售全新、孝親房、14戶小社區',
+            url: 'https://www.facebook.com/share/p/17uLsBzXiB/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '3層透天' },
+                    { label: '格局', value: '3房2廳3衛' },
+                    { label: '建坪', value: '26-27坪' },
+                    { label: '地坪', value: '20-21坪' },
+                    { label: '社區', value: '14戶（售12戶）' }
+                ],
+                features: [
+                    '一樓孝親房，爸媽不必再爬樓梯',
+                    '二樓雙套房，夫妻與子女各自獨立',
+                    'Philips五合一電子鎖、INAX免治馬桶',
+                    '預留電動車充電管線',
+                    '近未來國五冬山北向交流道',
+                    '聯絡人：楊政軒 0980-326-594（台灣房屋成功團隊）'
+                ]
+            }
+        },
+        {
+            id: 'sanxing_yuemei',
+            name: '三星國中旁大車庫5房別墅',
+            price: 1280,
+            lat: 24.6670,
+            lng: 121.6570,
+            status: 'interested',
+            address: '宜蘭縣三星鄉月眉路三段',
+            note: '大車庫停兩車、5房、近三星國中',
+            url: 'https://www.facebook.com/share/p/1KBVPi6z2z/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-3.5樓' },
+                    { label: '格局', value: '5房2廳4衛' },
+                    { label: '屋齡', value: '19年' },
+                    { label: '建坪', value: '60.14坪' },
+                    { label: '地坪', value: '31.19坪' }
+                ],
+                features: [
+                    '大車庫可停兩部車，回家不用找車位',
+                    '五房大空間，三代同堂也沒問題',
+                    '屋況新穎，家具家電進駐可直接入住',
+                    '走路到三星國中、運動場、三星市場',
+                    '市區生活機能完整，採買超方便',
+                    '聯絡人：謝小姐 0979-671-398（有巢氏房屋）'
+                ]
+            }
+        },
+        {
+            id: 'zhuangwei_xinnan',
+            name: '壯圍邊間便宜透天',
+            price: 698,
+            lat: 24.7560,
+            lng: 121.7630,
+            status: 'new',
+            address: '宜蘭縣壯圍鄉新南路',
+            note: '大坪數邊間、挑高、前後臨路',
+            url: 'https://www.facebook.com/share/p/1895nRJbDx/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '格局', value: '3房2廳2衛' },
+                    { label: '屋齡', value: '29年' },
+                    { label: '建坪', value: '60坪' },
+                    { label: '土地', value: '38坪' }
+                ],
+                features: [
+                    '挑高設計，空間感佳',
+                    '邊間，前後臨路，採光通風好',
+                    '低總價大坪數，性價比高',
+                    '聯絡人：林先生 0955-641-450（宜蘭住商新月店）'
+                ]
+            }
+        },
+        {
+            id: 'yuanshan_xinwan',
+            name: '員山全新完工四套房透天',
+            price: 1350,
+            lat: 24.7600,
+            lng: 121.7230,
+            status: 'interested',
+            address: '宜蘭縣員山鄉深洲一路72巷8-3號',
+            note: '全新完工、四套房、田園風光',
+            url: 'https://www.facebook.com/share/p/18HXTkQMLt/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '共三層' },
+                    { label: '格局', value: '4房2廳5衛（四套房）' },
+                    { label: '建坪', value: '43坪' },
+                    { label: '屋齡', value: '113年完工（全新）' }
+                ],
+                features: [
+                    '全新完工，四套房格局方正',
+                    '離塵不離城，往返宜蘭羅東都便利',
+                    '田園風光，社區單純安靜',
+                    '聯絡人：0981-031-242（台灣房屋陽明店/成功團隊）'
+                ]
+            }
+        },
+        {
+            id: 'yilan_city_5suite',
+            name: '宜蘭市全新整修5套房透天',
+            price: 1280,
+            lat: 24.7580,
+            lng: 121.7540,
+            status: 'interested',
+            address: '宜蘭市',
+            note: '全新整修、5套房、大面寬靜巷',
+            url: 'https://www.facebook.com/share/p/16qosaSn5P/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '共二層' },
+                    { label: '格局', value: '5房2廳6衛（5套房）' },
+                    { label: '建坪', value: '34坪（增建後更大）' },
+                    { label: '屋齡', value: '民國70年完工' }
+                ],
+                features: [
+                    '全新整修，增建約23坪，使用坪數大',
+                    '大面寬住宅透天，全新5套房',
+                    '門前好停車，靜巷不吵',
+                    '自用收租皆可，稀有釋出',
+                    '聯絡人：0981-031-242（台灣房屋陽明店/成功團隊）'
+                ]
+            }
+        },
+        {
+            id: 'suao_zhongxiao',
+            name: '蘇澳鎮忠孝路透天',
+            price: 988,
+            lat: 24.5960,
+            lng: 121.8520,
+            status: 'interested',
+            address: '宜蘭縣蘇澳鎮忠孝路',
+            note: '近蘇澳交流道、大坪數、可停車',
+            url: 'https://www.facebook.com/share/p/1BtcnYQ3ao/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-4樓' },
+                    { label: '格局', value: '4房3廳3衛' },
+                    { label: '建坪', value: '57.51坪' },
+                    { label: '土地', value: '23.43坪' }
+                ],
+                features: [
+                    '2分鐘到文化國中',
+                    '近國五蘇澳交流道，南往北走很方便',
+                    '門口可停車，愛車不怕發展',
+                    '獨家專任，屋主誠意賣',
+                    '聯絡人：賴瑋珊 0935-255252（台灣房屋宜蘭轉運站店）'
+                ]
+            }
+        },
+        {
+            id: 'suao_masai_villa',
+            name: '馬賽全新別墅',
+            price: 1088,
+            lat: 24.5840,
+            lng: 121.8580,
+            status: 'interested',
+            address: '宜蘭縣蘇澳鎮聖愛路',
+            note: '全新、7米寬、一樓孝親房、近交流道',
+            url: 'https://www.facebook.com/share/p/1H79Pb65h4/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-3樓' },
+                    { label: '格局', value: '3房3廳4衛' },
+                    { label: '建坪', value: '56坪' },
+                    { label: '地坪', value: '45坪' },
+                    { label: '面寬', value: '7米大面寬' },
+                    { label: '朝向', value: '坐南朝北' },
+                    { label: '屋齡', value: '全新' }
+                ],
+                features: [
+                    '全新別墅，格局方正，採光佳',
+                    '7米寬，室內比別人亮、比別人寬',
+                    '一樓可隔孝親房（標配非選配）',
+                    '近馬賽交流道，國五+蘇花改皆便',
+                    '近馬賽市場、市場、學區，住靜巷',
+                    '聯絡人：楊惠雯 0976-484-876（永義房屋羅東南門中正店）'
+                ]
+            }
+        },
+        {
+            id: 'meicheng_community',
+            name: '美城社區田園透天',
+            price: 1288,
+            lat: 24.7560,
+            lng: 121.7480,
+            status: 'interested',
+            address: '宜蘭縣壯圍鄉大福路二段150巷39弄263號',
+            note: '近壯圍交流道3分鐘、屋況新、孝親房',
+            url: 'https://www.facebook.com/share/p/1CMiHXZzfQ/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-3層' },
+                    { label: '格局', value: '5房2廳3衛' },
+                    { label: '建坪', value: '56.8坪（+增建4坪）' },
+                    { label: '土地', value: '35.39坪' },
+                    { label: '屋齡', value: '約10年' },
+                    { label: '朝向', value: '坐東朝西' }
+                ],
+                features: [
+                    '屋況新，採光明亮，通風佳，免整理即可入住',
+                    '格局方正，一樓規劃孝親房',
+                    '後方平台增建約4坪，使用空間更彈性',
+                    '門前可停車，出入方便，社區單純',
+                    '近國五壯圍交流道約3分鐘，礁溪宜蘭市區約10分鐘',
+                    '聯絡人：邱宏智 0905-288-062（永慶不動產宜蘭交流道加盟店）'
+                ]
+            }
+        },
+        {
+            id: 'yuanshan_fudeng',
+            name: '員山富登新5房全新別墅',
+            price: 1180,
+            lat: 24.7570,
+            lng: 121.7180,
+            status: 'interested',
+            address: '宜蘭縣員山鄉',
+            note: '全新建案、5房孝親房、近員山國中',
+            url: 'https://www.facebook.com/share/p/1CVgSjVPtp/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '3樓' },
+                    { label: '格局', value: '5房2廳3衛' },
+                    { label: '建坪', value: '44坪' },
+                    { label: '地坪', value: '26.7坪' },
+                    { label: '屋齡', value: '全新（0.1年）' }
+                ],
+                features: [
+                    '全新建案，美美落成，市場上破盤價',
+                    '稀有5房有孝親房、有學區',
+                    '近員山國中，附近有超商',
+                    '員山市區5分鐘，宜蘭市區7-10分鐘',
+                    '聯絡人：吳小姐 0925-032190（21世紀不動產黎明）'
+                ]
+            }
+        },
+        {
+            id: 'yilan_lanfeng_rental',
+            name: '宜蘭大學旁收租透天',
+            price: 1288,
+            lat: 24.7650,
+            lng: 121.7520,
+            status: 'interested',
+            address: '宜蘭市嵐峰路二段',
+            note: '7房收租、學區蛋黃區、宜蘭大學旁',
+            url: 'https://www.facebook.com/share/p/1C3nvspCqK/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '4層透天別墅' },
+                    { label: '格局', value: '7房1廳4衛' },
+                    { label: '建坪', value: '63.52坪' },
+                    { label: '地坪', value: '23.6坪' }
+                ],
+                features: [
+                    '超級學區：宜蘭大學、蘭陽女中、復興國中',
+                    '目前7房穩定收租，可改回住家型態',
+                    '宜大商圈周邊，生活機能極佳',
+                    '近宜蘭運動公園、宜蘭科學園區',
+                    '坐落蛋黃區，發展潛力相當有實力',
+                    '聯絡人：楊淞惟 0976-638-880（旺慶不動產）'
+                ]
+            }
+        },
+        {
+            id: 'wujie_riverview',
+            name: '五結山河雙景電梯小宅',
+            price: 850,
+            lat: 24.6900,
+            lng: 121.8150,
+            status: 'interested',
+            address: '宜蘭縣五結鄉五結路三段',
+            note: '山河雙景第一排、電梯、朝東採光佳',
+            url: 'https://www.facebook.com/share/p/1CADJX35Tr/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '4樓/共4樓（電梯）' },
+                    { label: '格局', value: '2房2廳1衛' },
+                    { label: '建坪', value: '22.36坪' },
+                    { label: '屋齡', value: '約11年' },
+                    { label: '朝向', value: '朝東' },
+                    { label: '管理費', value: '約988元/月' }
+                ],
+                features: [
+                    '山河雙景第一排視野，每天看見山與河的開闊視野',
+                    '採光明亮，格局俐落，住起來剛剛好',
+                    '空間好規劃，成熟生活圈',
+                    '交通便利，首購/自住/置產皆適合',
+                    '聯絡人：楊政軒 0980-326-594（台灣房屋成功團隊）'
+                ]
+            }
+        },
+        {
+            id: 'yilan_fuxing_duplex',
+            name: '宜蘭市復興路雙併別墅',
+            price: 1198,
+            lat: 24.7510,
+            lng: 121.7530,
+            status: 'interested',
+            address: '宜蘭市復興路',
+            note: '降價誠售、文教區、自有車庫、孝親房',
+            url: 'https://www.facebook.com/share/p/1D69r5BeTz/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '共二層' },
+                    { label: '格局', value: '5房2廳2衛' },
+                    { label: '建坪', value: '43坪' },
+                    { label: '地坪', value: '32坪' },
+                    { label: '屋齡', value: '40年' }
+                ],
+                features: [
+                    '稀有雙併別墅釋出，有孝親房',
+                    '自有車庫，停車免煩惱，鬧中取靜',
+                    '近文化中心、宜蘭高中，文教區優質環境',
+                    '近神農商圈，食衣住行超便利',
+                    '大降價：1380萬→1198萬，誠意賣',
+                    '聯絡人：許小姐 0935-248006（台灣房屋宜蘭高體新特區加盟店）'
+                ]
+            }
+        },
+        {
+            id: 'dongshan_rd_villa',
+            name: '冬山路透天別墅',
+            price: 1138,
+            lat: 24.6630,
+            lng: 121.7890,
+            status: 'interested',
+            address: '宜蘭縣冬山鄉冬山路一段',
+            note: '冬山市區核心、近火車站、可分層出租',
+            url: 'https://www.facebook.com/share/p/19e8xVGLfy/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-2層透天別墅' },
+                    { label: '格局', value: '2房2廳3衛' },
+                    { label: '建坪', value: '36.86坪' },
+                    { label: '土地', value: '30.59坪' },
+                    { label: '屋齡', value: '46年' },
+                    { label: '朝向', value: '朝西南' }
+                ],
+                features: [
+                    '冬山市區核心，近火車站、7-11',
+                    '前後臨路，可分層出租/外牆已翻修',
+                    '店面辦公住家皆合適，彈性使用',
+                    '聯絡人：0909-223-655（台灣房屋林場文化店/成功團隊）'
+                ]
+            }
+        },
+        {
+            id: 'yilan_lanfeng_new',
+            name: '宜蘭市嵐峰路三段透天',
+            price: 1198,
+            lat: 24.7435,
+            lng: 121.7450,
+            status: 'new',
+            address: '宜蘭市嵐峰路三段108巷24號',
+            note: '近宜蘭運動公園、生活機能佳',
+            url: 'https://www.facebook.com/groups/800758829946430/permalink/26415164051412556/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '地址', value: '嵐峰路三段108巷24號' }
+                ],
+                features: [
+                    '位處宜蘭市精華地段',
+                    '近宜蘭運動公園，休閒方便',
+                    '生活圈完整，採買便利'
+                ]
+            }
+        },
+        {
+            id: 'luodong_zhulin_renovated',
+            name: '羅東竹林商圈全新裝潢優質美透天',
+            price: 818,
+            lat: 24.6887,
+            lng: 121.7661,
+            status: 'new',
+            address: '宜蘭縣羅東鎮竹林商圈',
+            note: '全屋翻新、近竹林商圈、機能強',
+            url: 'https://www.facebook.com/share/p/1BHgufKbkg/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '物件編號', value: '1044170' },
+                    { label: '樓層', value: '1-2樓' },
+                    { label: '格局', value: '2房2廳2衛' },
+                    { label: '建坪', value: '30.667坪' },
+                    { label: '地坪', value: '18.24坪' },
+                    { label: '竣工', value: '69年3月18日' }
+                ],
+                features: [
+                    '全屋翻新：水電管路更新、摩登內裝',
+                    '便利竹林生活圈：下樓就開吃，機能超強',
+                    '小家庭最愛：溫馨 2 房規劃，空間好利用',
+                    '超低負擔：免管理費、總價不到 900 萬',
+                    '五結市區與羅東市區交界，精華地段',
+                    '聯繫人：林語芊 03-9616000'
+                ]
+            }
+        },
+        {
+            id: 'luodong_commercial_renovated',
+            name: '羅東商圈附近全新整理小透天',
+            price: 818,
+            lat: 24.6769,
+            lng: 121.7696,
+            status: 'new',
+            address: '宜蘭縣羅東鎮 (羅東商圈附近)',
+            note: '全棟全新裝潢、負擔最輕鬆、有車位',
+            url: 'https://www.facebook.com/share/p/1ZUoqihHHQ/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '2層' },
+                    { label: '格局', value: '2房2廳2衛' },
+                    { label: '建坪', value: '30.6坪' },
+                    { label: '地坪', value: '18.25坪' },
+                    { label: '屋齡', value: '46年' }
+                ],
+                features: [
+                    '降價50萬：全棟全新裝潢，屋況極佳',
+                    '高性價比：用華廈價格買到全新整理小透天',
+                    '專屬小家庭：不大不小剛剛好，負擔輕鬆',
+                    '低總價含車位，生活機能優',
+                    '距離羅東商圈僅幾分鐘車程',
+                    '聯繫人：賴先生 0912034645'
+                ]
+            }
+        },
+        {
+            id: 'dongshan_qinggou_house',
+            name: '清溝夜市優質透天',
+            price: 598,
+            lat: 24.6608,
+            lng: 121.7756,
+            status: 'new',
+            address: '宜蘭縣冬山鄉鹿安路宏泰巷',
+            note: '再降價、近清溝夜市、月租1.4萬',
+            url: 'https://www.facebook.com/share/p/1BpPrpDFuK/',
+            image: null,
+            fullDetails: {
+                specs: [
+                    { label: '樓層', value: '1-2樓' },
+                    { label: '格局', value: '1房3廳3衛' },
+                    { label: '建坪', value: '29.9坪 (使用約40坪)' },
+                    { label: '地坪', value: '26.1坪' },
+                    { label: '竣工', value: '71年2月 (約54年)' },
+                    { label: '朝向', value: '朝南' }
+                ],
+                features: [
+                    '再降價598萬，高CP值透天',
+                    '使用空間大：建坪29.9坪，增建後約40坪',
+                    '目前穩定收租：目前月租1.4萬，自用出租皆宜',
+                    '地點優越：近羅東、冬山市區、清溝國小',
+                    '生活機能佳：出巷口即是觀光夜市',
+                    '聯繫人：楊先生 0905-120-818 / 0955-375-818'
+                ]
+            }
+        }
+    ];
+
+
+    // 距離計算函數 (Haversine formula)
+    function getDistance(lat1, lon1, lat2, lon2) {
+        var R = 6371; // km
+        var dLat = (lat2-lat1) * Math.PI / 180;
+        var dLon = (lon2-lon1) * Math.PI / 180;
+        var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        var d = R * c;
+        return d * 1; // return number
+    }
+
+    // 尋找最近設施
+    function findNearest(lat, lng, facilitiesList) {
+        let minInfo = { dist: Infinity, name: '' };
+        facilitiesList.forEach(fac => {
+            const d = getDistance(lat, lng, fac.lat, fac.lng);
+            if(d < minInfo.dist) {
+                minInfo.dist = d;
+                minInfo.name = fac.name;
+            }
+        });
+        return {
+            dist: minInfo.dist.toFixed(1),
+            name: minInfo.name
+        };
+    }
+
+    // 5. 渲染地圖與列表
+    const propertyList = document.getElementById('propertyList');
+    const markers = {};
+    const facilityLayers = {
+        train: L.layerGroup(),
+        hsr: L.layerGroup(),
+        highway: L.layerGroup(),
+        bus: L.layerGroup(),
+        properties: L.layerGroup().addTo(map) // Default show items
+    };
+
+    // 設施樣式配置
+    const facilityStyles = {
+        train: { 
+            bg: 'linear-gradient(135deg, #1e40af, #3b82f6)', 
+            border: '#1e3a8a',
+            shadow: 'rgba(30, 64, 175, 0.5)'
+        },
+        hsr: { 
+            bg: 'linear-gradient(135deg, #ea580c, #f97316)', 
+            border: '#c2410c',
+            shadow: 'rgba(234, 88, 12, 0.5)'
+        },
+        highway: { 
+            bg: 'linear-gradient(135deg, #15803d, #22c55e)', 
+            border: '#166534',
+            shadow: 'rgba(21, 128, 61, 0.5)'
+        },
+        bus: { 
+            bg: 'linear-gradient(135deg, #7c3aed, #a78bfa)', 
+            border: '#6d28d9',
+            shadow: 'rgba(124, 58, 237, 0.5)'
+        }
+    };
+
+    // 繪製交通設施
+    function drawFacilities(type, list) {
+        const style = facilityStyles[type];
+        list.forEach(fac => {
+            const marker = L.marker([fac.lat, fac.lng], {
+                icon: L.divIcon({
+                    html: `
+                        <div style="
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            transform: translateX(-50%);
+                        ">
+                            <div style="
+                                font-size: 32px;
+                                width: 50px;
+                                height: 50px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                background: ${style.bg};
+                                border: 3px solid ${style.border};
+                                border-radius: 50%;
+                                box-shadow: 0 4px 12px ${style.shadow}, 0 0 0 4px rgba(255,255,255,0.8);
+                                animation: pulse 2s infinite;
+                            ">${fac.icon}</div>
+                            <div style="
+                                margin-top: 5px;
+                                font-size: 13px;
+                                font-weight: 700;
+                                color: #1f2937;
+                                background: rgba(255,255,255,0.95);
+                                padding: 4px 10px;
+                                border-radius: 6px;
+                                white-space: nowrap;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                                border: 2px solid ${style.border};
+                            ">${fac.name}</div>
+                        </div>
+                    `,
+                    className: 'facility-icon',
+                    iconSize: [100, 80],
+                    iconAnchor: [50, 40]
+                })
+            }).bindPopup(`<b style="font-size:16px;">${fac.icon} ${fac.name}</b>`);
+            marker.addTo(facilityLayers[type]);
+        });
+    }
+
+    drawFacilities('train', facilities.train);
+    drawFacilities('hsr', facilities.hsr);
+    drawFacilities('highway', facilities.highway);
+    drawFacilities('bus', facilities.bus);
+
+    // 添加圖層控制
+    // 默認顯示所有設施以解決使用者想看的要求
+    facilityLayers.train.addTo(map);
+    facilityLayers.hsr.addTo(map);
+    facilityLayers.highway.addTo(map);
+    facilityLayers.bus.addTo(map);
+
+    L.control.layers(null, {
+        "🏡 房產物件": facilityLayers.properties,
+        "🚂 火車/台鐵": facilityLayers.train,
+        "🚄 高鐵 (預定)": facilityLayers.hsr,
+        "🛣️ 國道五號": facilityLayers.highway,
+        "🚌 公車/轉運": facilityLayers.bus
+    }, { collapsed: false }).addTo(map);
+
+
+    // 繪製物件
+    properties.forEach(prop => {
+        // --- 計算距離 ---
+        const distTaipei = getDistance(prop.lat, prop.lng, longDistanceTargets.taipei.lat, longDistanceTargets.taipei.lng).toFixed(1);
+        const distHualien = getDistance(prop.lat, prop.lng, longDistanceTargets.hualien.lat, longDistanceTargets.hualien.lng).toFixed(1);
+        
+        const nearestTrain = findNearest(prop.lat, prop.lng, facilities.train);
+        const nearestHighway = findNearest(prop.lat, prop.lng, facilities.highway);
+        const nearestBus = findNearest(prop.lat, prop.lng, facilities.bus);
+        const distHSR = getDistance(prop.lat, prop.lng, facilities.hsr[0].lat, facilities.hsr[0].lng).toFixed(1);
+
+        // --- UI 邏輯 ---
+        let badgeClass = 'badge-rejected';
+        let badgeText = '不考慮';
+        let markerClass = 'marker-rejected';
+
+        if(prop.status === 'new') {
+            badgeClass = 'badge-new';
+            badgeText = '✨ 推薦物件';
+            markerClass = 'marker-new';
+        } else if(prop.status === 'interested') {
+            badgeClass = 'badge-interested';
+            badgeText = '❤️ 有興趣';
+            markerClass = 'marker-interested';
+        }
+
+        // --- 卡片 ---
+        const card = document.createElement('div');
+        card.className = `property-card ${prop.status}`;
+        card.id = `card-${prop.id}`;
+        
+        let imageHtml = '';
+        if(prop.image) {
+            imageHtml = `<div style="margin-bottom:10px; border-radius:8px; overflow:hidden; height:150px; background:#eee;">
+                            <img src="${prop.image}" style="width:100%; height:100%; object-fit:cover;" alt="${prop.name}">
+                         </div>`;
+        }
+
+        let linkHtml = '';
+        if(prop.url) {
+            linkHtml = `<a href="${prop.url}" target="_blank" style="display:block; text-align:center; background:#667eea; color:white; text-decoration:none; padding:8px; border-radius:5px; margin-top:10px; font-weight:bold; font-size:0.9rem;">
+                            🔎 查看外部連結
+                        </a>`;
+        }
+
+        let detailsHtml = '';
+        if(prop.fullDetails) {
+            const specHtml = prop.fullDetails.specs.map(s => `
+                <div class="spec-item">
+                    <span class="spec-label">${s.label}</span>
+                    <span class="spec-value">${s.value}</span>
+                </div>
+            `).join('');
+
+            const featureHtml = prop.fullDetails.features.map(f => `<li>${f}</li>`).join('');
+
+            detailsHtml = `
+                <button class="details-toggle" id="toggle-${prop.id}">
+                    <span>📜 查看詳細規格</span> <small>▼</small>
+                </button>
+                <div class="details-content" id="content-${prop.id}">
+                    <div class="spec-grid">${specHtml}</div>
+                    <ul class="feature-list">${featureHtml}</ul>
+                </div>
+            `;
+        }
+
+        card.innerHTML = `
+            ${imageHtml}
+            <span class="badge ${badgeClass}">${badgeText}</span>
+            <div class="card-title">${prop.name}</div>
+            <div class="card-price">NT$ ${prop.price} 萬</div>
+            <div class="card-details">
+                📍 ${prop.address}<br>
+                📝 ${prop.note}
+            </div>
+            ${detailsHtml}
+            <div class="transport-info">
+                <div class="transport-item" style="color:#2b6cb0; font-weight:bold;"><span>🚂 最近火車</span> <span>${nearestTrain.name} (${nearestTrain.dist} km)</span></div>
+                <div class="transport-item" style="color:#c05621; font-weight:bold;"><span>🛣️ 最近國五</span> <span>${nearestHighway.name} (${nearestHighway.dist} km)</span></div>
+                <div class="transport-item"><span>🚌 最近公車</span> <span>${nearestBus.name} (${nearestBus.dist} km)</span></div>
+                <div class="transport-item"><span>🚄 宜蘭高鐵</span> <span>${distHSR} km</span></div>
+                <div class="transport-item"><span>🚗 往台北</span> <span>${distTaipei} km</span></div>
+                <div class="transport-item"><span>🚗 往花蓮</span> <span>${distHualien} km</span></div>
+            </div>
+            ${linkHtml}
+        `;
+
+        card.addEventListener('click', (e) => {
+            // 如果點擊的是 toggle 或是 toggle 內的元素，則不觸發 flyTo
+            if (e.target.closest('.details-toggle')) return;
+            
+            map.flyTo([prop.lat, prop.lng], 15);
+            highlighCard(prop.id);
+            markers[prop.id].openPopup();
+        });
+
+        if(prop.fullDetails) {
+            const toggleBtn = card.querySelector(`#toggle-${prop.id}`);
+            const content = card.querySelector(`#content-${prop.id}`);
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                content.classList.toggle('expanded');
+                toggleBtn.querySelector('small').innerHTML = content.classList.contains('expanded') ? '▲' : '▼';
+            });
+        }
+
+        propertyList.appendChild(card);
+
+        // --- 地圖 Marker ---
+        const icon = L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div class="${markerClass}"><div class="marker-pin"></div><i class="marker-icon-text"></i></div>`,
+            iconSize: [30, 42],
+            iconAnchor: [15, 42]
+        });
+
+        const marker = L.marker([prop.lat, prop.lng], { icon: icon })
+            .bindPopup(`<b>${prop.name}</b><br>${prop.price}萬<br>最近火車: ${nearestTrain.name} (${nearestTrain.dist}km)`);
+        
+        marker.on('click', () => {
+            highlighCard(prop.id);
+            document.getElementById(`card-${prop.id}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+
+        markers[prop.id] = marker;
+        marker.addTo(facilityLayers.properties);
+    });
+
+    function highlighCard(id) {
+        document.querySelectorAll('.property-card').forEach(c => c.classList.remove('active'));
+        document.getElementById(`card-${id}`).classList.add('active');
+    }
+
+</script>
+</body>
+</html>
