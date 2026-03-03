@@ -6,6 +6,8 @@
     <title>宜蘭買房物件地圖 (真實地圖版)</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -274,29 +276,176 @@
             }
         }
 
+
         .facility-icon {
             background: transparent !important;
             border: none !important;
         }
+
+        /* 自訂捲軸 (Scrollbar) */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e0; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0; 
+        }
+
+        /* 篩選器樣式 */
+        .filter-container {
+            padding: 10px 15px;
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .filter-row {
+            display: flex;
+            gap: 10px;
+        }
+        .filter-select, .search-input {
+            padding: 8px 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            flex: 1;
+            color: #4a5568;
+            outline: none;
+            background: #f8f9fa;
+        }
+        .search-input:focus, .filter-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102,126,234,0.2);
+            background: #fff;
+        }
+
+        /* 真實距離按鈕 */
+        .btn-real-route {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+            background: #f0f4ff;
+            border: 1px dashed #667eea;
+            border-radius: 6px;
+            color: #4a5568;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+        }
+        .btn-real-route:hover {
+            background: #667eea;
+            color: #fff;
+        }
+
+        /* 手機版 RWD 樣式 */
+        #mobile-toggle {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            #sidebar {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                height: 60vh;
+                z-index: 1001;
+                transform: translateY(100%);
+                transition: transform 0.3s ease-in-out;
+                border-radius: 20px 20px 0 0;
+                background: #fff;
+            }
+            #sidebar.show {
+                transform: translateY(0);
+                box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+            }
+            #mobile-toggle {
+                display: block;
+            }
+            .header h1 {
+                font-size: 1.2rem;
+            }
+        }
+
 
     </style>
 </head>
 <body>
 
 <div id="sidebar">
+
     <div class="header">
         <h1>🏡 宜蘭找房地圖</h1>
         <p>點擊列表或地圖標記查看詳情</p>
     </div>
+    
+    <!-- 篩選器與搜尋列 -->
+    <div class="filter-container">
+        <div class="filter-row">
+            <input type="text" id="searchInput" class="search-input" placeholder="🔍 搜尋建案、地址或特色...">
+        </div>
+        <div class="filter-row">
+            <select id="priceFilter" class="filter-select">
+                <option value="all">💰 所有價格</option>
+                <option value="under800">800萬以下</option>
+                <option value="800to1200">800-1200萬</option>
+                <option value="over1200">1200萬以上</option>
+            </select>
+            <select id="statusFilter" class="filter-select">
+                <option value="all">🏷️ 所有狀態</option>
+                <option value="new">✨ 推薦物件</option>
+                <option value="interested">❤️ 有興趣</option>
+                <option value="rejected">❌ 不考慮</option>
+            </select>
+        </div>
+        <div class="filter-row">
+            <select id="sortSelect" class="filter-select">
+                <option value="default">↕️ 預設排序</option>
+                <option value="priceAsc">價格：由低到高</option>
+                <option value="priceDesc">價格：由高到低</option>
+            </select>
+        </div>
+    </div>
+
     <div class="property-list" id="propertyList">
+
         <!-- Javascript will populate this -->
     </div>
 </div>
 
 <div id="map"></div>
 
+<button id="mobile-toggle">📋 顯示物件列表</button>
+
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- Leaflet MarkerCluster JS -->
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
 <script>
     // 1. 初始化地圖
@@ -1099,8 +1248,35 @@
         hsr: L.layerGroup(),
         highway: L.layerGroup(),
         bus: L.layerGroup(),
-        properties: L.layerGroup().addTo(map) // Default show items
+        properties: L.markerClusterGroup({
+            maxClusterRadius: 40,
+            spiderfyOnMaxZoom: true,
+            disableClusteringAtZoom: 15
+        }).addTo(map)
     };
+
+    // 手機版側欄邏輯
+    const sidebar = document.getElementById('sidebar');
+    const mobileToggle = document.getElementById('mobile-toggle');
+    mobileToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('show');
+        if(sidebar.classList.contains('show')) {
+            mobileToggle.innerHTML = '🗺️ 隱藏列表查看地圖';
+            mobileToggle.style.background = '#e53e3e';
+        } else {
+            mobileToggle.innerHTML = '📋 顯示物件列表';
+            mobileToggle.style.background = '#4a5568';
+        }
+    });
+
+    map.on('click', () => {
+        if(window.innerWidth <= 768 && sidebar.classList.contains('show')) {
+            sidebar.classList.remove('show');
+            mobileToggle.innerHTML = '📋 顯示物件列表';
+            mobileToggle.style.background = '#4a5568';
+        }
+    });
+
 
     // 設施樣式配置
     const facilityStyles = {
@@ -1196,134 +1372,291 @@
     }, { collapsed: false }).addTo(map);
 
 
-    // 繪製物件
-    properties.forEach(prop => {
-        // --- 計算距離 ---
-        const distTaipei = getDistance(prop.lat, prop.lng, longDistanceTargets.taipei.lat, longDistanceTargets.taipei.lng).toFixed(1);
-        const distHualien = getDistance(prop.lat, prop.lng, longDistanceTargets.hualien.lat, longDistanceTargets.hualien.lng).toFixed(1);
-        
-        const nearestTrain = findNearest(prop.lat, prop.lng, facilities.train);
-        const nearestHighway = findNearest(prop.lat, prop.lng, facilities.highway);
-        const nearestBus = findNearest(prop.lat, prop.lng, facilities.bus);
-        const distHSR = getDistance(prop.lat, prop.lng, facilities.hsr[0].lat, facilities.hsr[0].lng).toFixed(1);
-
-        // --- UI 邏輯 ---
-        let badgeClass = 'badge-rejected';
-        let badgeText = '不考慮';
-        let markerClass = 'marker-rejected';
-
-        if(prop.status === 'new') {
-            badgeClass = 'badge-new';
-            badgeText = '✨ 推薦物件';
-            markerClass = 'marker-new';
-        } else if(prop.status === 'interested') {
-            badgeClass = 'badge-interested';
-            badgeText = '❤️ 有興趣';
-            markerClass = 'marker-interested';
-        }
-
-        // --- 卡片 ---
-        const card = document.createElement('div');
-        card.className = `property-card ${prop.status}`;
-        card.id = `card-${prop.id}`;
-        
-        let imageHtml = '';
-        if(prop.image) {
-            imageHtml = `<div style="margin-bottom:10px; border-radius:8px; overflow:hidden; height:150px; background:#eee;">
-                            <img src="${prop.image}" style="width:100%; height:100%; object-fit:cover;" alt="${prop.name}">
-                         </div>`;
-        }
-
-        let linkHtml = '';
-        if(prop.url) {
-            linkHtml = `<a href="${prop.url}" target="_blank" style="display:block; text-align:center; background:#667eea; color:white; text-decoration:none; padding:8px; border-radius:5px; margin-top:10px; font-weight:bold; font-size:0.9rem;">
-                            🔎 查看外部連結
-                        </a>`;
-        }
-
-        let detailsHtml = '';
-        if(prop.fullDetails) {
-            const specHtml = prop.fullDetails.specs.map(s => `
-                <div class="spec-item">
-                    <span class="spec-label">${s.label}</span>
-                    <span class="spec-value">${s.value}</span>
-                </div>
-            `).join('');
-
-            const featureHtml = prop.fullDetails.features.map(f => `<li>${f}</li>`).join('');
-
-            detailsHtml = `
-                <button class="details-toggle" id="toggle-${prop.id}">
-                    <span>📜 查看詳細規格</span> <small>▼</small>
-                </button>
-                <div class="details-content" id="content-${prop.id}">
-                    <div class="spec-grid">${specHtml}</div>
-                    <ul class="feature-list">${featureHtml}</ul>
-                </div>
-            `;
-        }
-
-        card.innerHTML = `
-            ${imageHtml}
-            <span class="badge ${badgeClass}">${badgeText}</span>
-            <div class="card-title">${prop.name}</div>
-            <div class="card-price">NT$ ${prop.price} 萬</div>
-            <div class="card-details">
-                📍 ${prop.address}<br>
-                📝 ${prop.note}
-            </div>
-            ${detailsHtml}
-            <div class="transport-info">
-                <div class="transport-item" style="color:#2b6cb0; font-weight:bold;"><span>🚂 最近火車</span> <span>${nearestTrain.name} (${nearestTrain.dist} km)</span></div>
-                <div class="transport-item" style="color:#c05621; font-weight:bold;"><span>🛣️ 最近國五</span> <span>${nearestHighway.name} (${nearestHighway.dist} km)</span></div>
-                <div class="transport-item"><span>🚌 最近公車</span> <span>${nearestBus.name} (${nearestBus.dist} km)</span></div>
-                <div class="transport-item"><span>🚄 宜蘭高鐵</span> <span>${distHSR} km</span></div>
-                <div class="transport-item"><span>🚗 往台北</span> <span>${distTaipei} km</span></div>
-                <div class="transport-item"><span>🚗 往花蓮</span> <span>${distHualien} km</span></div>
-            </div>
-            ${linkHtml}
-        `;
-
-        card.addEventListener('click', (e) => {
-            // 如果點擊的是 toggle 或是 toggle 內的元素，則不觸發 flyTo
-            if (e.target.closest('.details-toggle')) return;
+    // 真實路徑 API (OSRM)
+    async function calculateRealRoute(prop, nearestTrain, nearestHighway, containerNode) {
+        try {
+            // OSRM Table Service
+            // 經緯度組合順序： 物件本體 ; 最近火車 ; 最近國五 ; 台北101
+            const coords = [
+                `${prop.lng},${prop.lat}`,
+                `${nearestTrain.lng},${nearestTrain.lat}`,
+                `${nearestHighway.lng},${nearestHighway.lat}`,
+                `${longDistanceTargets.taipei.lng},${longDistanceTargets.taipei.lat}`
+            ].join(';');
             
-            map.flyTo([prop.lat, prop.lng], 15);
-            highlighCard(prop.id);
-            markers[prop.id].openPopup();
-        });
+            // OSRM Public API
+            const url = `https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=duration,distance`;
+            
+            containerNode.innerHTML = '🚗 計算中...';
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if(data.code === 'Ok') {
+                const durations = data.durations[0]; // 秒數 array
+                const distances = data.distances[0]; // 公尺 array
+                
+                // durations[1] = 到火車, [2] = 到國五, [3] = 到台北
+                const t1 = Math.round(durations[1]/60);
+                const t2 = Math.round(durations[2]/60);
+                const t3 = Math.round(durations[3]/60);
+                
+                const d1 = (distances[1]/1000).toFixed(1);
+                const d2 = (distances[2]/1000).toFixed(1);
+                const d3 = (distances[3]/1000).toFixed(1);
+                
+                containerNode.innerHTML = `已更新真實車程 ✅`;
+                containerNode.style.background = '#d4edda';
+                containerNode.style.color = '#155724';
+                containerNode.style.border = '1px solid #c3e6cb';
+                
+                // 更新畫面上的數字
+                const tr = document.getElementById(`tr-${prop.id}-train`);
+                const hw = document.getElementById(`tr-${prop.id}-hw`);
+                const tp = document.getElementById(`tr-${prop.id}-tp`);
+                
+                if(tr) tr.innerHTML = `${nearestTrain.name} (${d1}km / 開車約 ${t1} 分鐘)`;
+                if(hw) hw.innerHTML = `${nearestHighway.name} (${d2}km / 開車約 ${t2} 分鐘)`;
+                if(tp) tp.innerHTML = `約 ${d3}km (開車約 ${t3} 分鐘)`;
+            } else {
+                containerNode.innerHTML = '❌ 路線計算失敗，請稍後重試';
+            }
+        } catch(e) {
+            console.error(e);
+            containerNode.innerHTML = '❌ API 連線錯誤，請稍後重試';
+        }
+    }
 
-        if(prop.fullDetails) {
-            const toggleBtn = card.querySelector(`#toggle-${prop.id}`);
-            const content = card.querySelector(`#content-${prop.id}`);
-            toggleBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                content.classList.toggle('expanded');
-                toggleBtn.querySelector('small').innerHTML = content.classList.contains('expanded') ? '▲' : '▼';
-            });
+
+    // 繪製與篩選系統
+    function renderProperties(dataList) {
+        // 清空列表與地圖標記
+        propertyList.innerHTML = '';
+        facilityLayers.properties.clearLayers();
+        Object.keys(markers).forEach(k => delete markers[k]);
+
+        if(dataList.length === 0) {
+            propertyList.innerHTML = '<div style="padding: 20px; text-align: center; color: #718096; margin-top: 20px;">找不到符合條件的物件 🏠</div>';
+            return;
         }
 
-        propertyList.appendChild(card);
+        dataList.forEach(prop => {
+            // --- 計算直線距離 (當作預設值) ---
+            const distTaipei = getDistance(prop.lat, prop.lng, longDistanceTargets.taipei.lat, longDistanceTargets.taipei.lng).toFixed(1);
+            const distHualien = getDistance(prop.lat, prop.lng, longDistanceTargets.hualien.lat, longDistanceTargets.hualien.lng).toFixed(1);
+            
+            let minTrain = {dist: Infinity, item: null};
+            facilities.train.forEach(f => {
+                let d = getDistance(prop.lat, prop.lng, f.lat, f.lng);
+                if(d < minTrain.dist) { minTrain.dist = d; minTrain.item = f; }
+            });
 
-        // --- 地圖 Marker ---
-        const icon = L.divIcon({
-            className: 'custom-div-icon',
-            html: `<div class="${markerClass}"><div class="marker-pin"></div><i class="marker-icon-text"></i></div>`,
-            iconSize: [30, 42],
-            iconAnchor: [15, 42]
+            let minHw = {dist: Infinity, item: null};
+            facilities.highway.forEach(f => {
+                let d = getDistance(prop.lat, prop.lng, f.lat, f.lng);
+                if(d < minHw.dist) { minHw.dist = d; minHw.item = f; }
+            });
+
+            let nearestTrain = { name: minTrain.item.name, dist: minTrain.dist.toFixed(1), lat: minTrain.item.lat, lng: minTrain.item.lng };
+            let nearestHighway = { name: minHw.item.name, dist: minHw.dist.toFixed(1), lat: minHw.item.lat, lng: minHw.item.lng };
+
+            const nearestBus = findNearest(prop.lat, prop.lng, facilities.bus);
+            const distHSR = getDistance(prop.lat, prop.lng, facilities.hsr[0].lat, facilities.hsr[0].lng).toFixed(1);
+
+            // --- UI 邏輯 ---
+            let badgeClass = 'badge-rejected';
+            let badgeText = '❌ 不考慮';
+            let markerClass = 'marker-rejected';
+
+            if(prop.status === 'new') {
+                badgeClass = 'badge-new';
+                badgeText = '✨ 推薦物件';
+                markerClass = 'marker-new';
+            } else if(prop.status === 'interested') {
+                badgeClass = 'badge-interested';
+                badgeText = '❤️ 有興趣';
+                markerClass = 'marker-interested';
+            }
+
+            // --- 卡片 ---
+            const card = document.createElement('div');
+            card.className = `property-card ${prop.status}`;
+            card.id = `card-${prop.id}`;
+            
+            let imageHtml = '';
+            if(prop.image) {
+                imageHtml = `<div style="margin-bottom:10px; border-radius:8px; overflow:hidden; height:150px; background:#eee;">
+                                <img src="${prop.image}" style="width:100%; height:100%; object-fit:cover;" alt="${prop.name}">
+                             </div>`;
+            }
+
+            let linkHtml = '';
+            if(prop.url) {
+                linkHtml = `<a href="${prop.url}" target="_blank" style="display:block; text-align:center; background:#667eea; color:white; text-decoration:none; padding:8px; border-radius:5px; margin-top:10px; font-weight:bold; font-size:0.9rem;">
+                                🔎 查看外部連結
+                            </a>`;
+            }
+
+            let detailsHtml = '';
+            if(prop.fullDetails) {
+                const specHtml = prop.fullDetails.specs.map(s => `
+                    <div class="spec-item">
+                        <span class="spec-label">${s.label}</span>
+                        <span class="spec-value">${s.value}</span>
+                    </div>
+                `).join('');
+
+                const featureHtml = prop.fullDetails.features.map(f => `<li>${f}</li>`).join('');
+
+                detailsHtml = `
+                    <button class="details-toggle" id="toggle-${prop.id}">
+                        <span>📜 查看詳細規格</span> <small>▼</small>
+                    </button>
+                    <div class="details-content" id="content-${prop.id}">
+                        <div class="spec-grid">${specHtml}</div>
+                        <ul class="feature-list">${featureHtml}</ul>
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                ${imageHtml}
+                <span class="badge ${badgeClass}">${badgeText}</span>
+                <div class="card-title">${prop.name}</div>
+                <div class="card-price">NT$ ${prop.price} 萬</div>
+                <div class="card-details">
+                    📍 ${prop.address}<br>
+                    📝 ${prop.note}
+                </div>
+                ${detailsHtml}
+                <div class="transport-info">
+                    <div class="transport-item" style="color:#2b6cb0; font-weight:bold;"><span>🚂 最近火車</span> <span id="tr-${prop.id}-train">${nearestTrain.name} (直線 ${nearestTrain.dist} km)</span></div>
+                    <div class="transport-item" style="color:#c05621; font-weight:bold;"><span>🛣️ 最近國五</span> <span id="tr-${prop.id}-hw">${nearestHighway.name} (直線 ${nearestHighway.dist} km)</span></div>
+                    <div class="transport-item"><span>🚌 最近公車</span> <span>${nearestBus.name} (直線 ${nearestBus.dist} km)</span></div>
+                    <div class="transport-item"><span>🚄 宜蘭高鐵</span> <span>直線 ${distHSR} km</span></div>
+                    <div class="transport-item"><span>🚗 往台北</span> <span id="tr-${prop.id}-tp">直線 ${distTaipei} km</span></div>
+                    <div class="transport-item"><span>🚗 往花蓮</span> <span>直線 ${distHualien} km</span></div>
+                    
+                    <button class="btn-real-route" id="routeBtn-${prop.id}">🚗 點擊取得真實開車距離與時間</button>
+                </div>
+                ${linkHtml}
+            `;
+
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('.details-toggle') || e.target.closest('.btn-real-route') || e.target.closest('a')) return;
+                
+                // On mobile, hide sidebar on card click
+                const sidebar = document.getElementById('sidebar');
+                if(window.innerWidth <= 768 && sidebar) {
+                    sidebar.classList.remove('show');
+                    const mobileToggle = document.getElementById('mobile-toggle');
+                    if (mobileToggle) {
+                        mobileToggle.innerHTML = '📋 顯示物件列表';
+                        mobileToggle.style.background = '#4a5568';
+                    }
+                }
+                
+                map.flyTo([prop.lat, prop.lng], 16, { duration: 0.8 });
+                highlighCard(prop.id);
+                
+                // Find marker in cluster and zoom to it
+                const m = markers[prop.id];
+                if(m && facilityLayers.properties) {
+                    facilityLayers.properties.zoomToShowLayer(m, function() {
+                        m.openPopup();
+                    });
+                }
+            });
+
+            if(prop.fullDetails) {
+                const toggleBtn = card.querySelector(`#toggle-${prop.id}`);
+                const content = card.querySelector(`#content-${prop.id}`);
+                toggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    content.classList.toggle('expanded');
+                    toggleBtn.querySelector('small').innerHTML = content.classList.contains('expanded') ? '▲' : '▼';
+                });
+            }
+
+            // 真實路線按鈕
+            const routeBtn = card.querySelector(`#routeBtn-${prop.id}`);
+            routeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                calculateRealRoute(prop, nearestTrain, nearestHighway, routeBtn);
+            });
+
+            propertyList.appendChild(card);
+
+            // --- 地圖 Marker ---
+            const icon = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div class="${markerClass}"><div class="marker-pin"></div><i class="marker-icon-text"></i></div>`,
+                iconSize: [30, 42],
+                iconAnchor: [15, 42]
+            });
+
+            const marker = L.marker([prop.lat, prop.lng], { icon: icon })
+                .bindPopup(`<b>${prop.name}</b><br>${prop.price}萬`);
+            
+            marker.on('click', () => {
+                highlighCard(prop.id);
+                const c = document.getElementById(`card-${prop.id}`);
+                if(c) c.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+
+            markers[prop.id] = marker;
+            marker.addTo(facilityLayers.properties);
         });
+    }
 
-        const marker = L.marker([prop.lat, prop.lng], { icon: icon })
-            .bindPopup(`<b>${prop.name}</b><br>${prop.price}萬<br>最近火車: ${nearestTrain.name} (${nearestTrain.dist}km)`);
-        
-        marker.on('click', () => {
-            highlighCard(prop.id);
-            document.getElementById(`card-${prop.id}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
-
-        markers[prop.id] = marker;
-        marker.addTo(facilityLayers.properties);
+    // 預處理 filter 用的搜尋字串
+    properties.forEach(p => {
+        let sText = `${p.name} ${p.address} ${p.note}`;
+        if(p.fullDetails) sText += " " + p.fullDetails.features.join(" ");
+        p._searchText = sText.toLowerCase();
     });
+
+    // Filter Logic
+    const searchInput = document.getElementById('searchInput');
+    const priceFilter = document.getElementById('priceFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    const sortSelect = document.getElementById('sortSelect');
+
+    function applyFilters() {
+        if (!searchInput) return; // safeguard
+        const keyword = searchInput.value.toLowerCase();
+        const priceVal = priceFilter.value;
+        const statusVal = statusFilter.value;
+        const sortVal = sortSelect.value;
+
+        // 1. 篩選
+        let filtered = properties.filter(p => {
+            if(keyword && !p._searchText.includes(keyword)) return false;
+            if(statusVal !== 'all' && p.status !== statusVal) return false;
+            
+            if(priceVal === 'under800' && p.price >= 800) return false;
+            if(priceVal === '800to1200' && (p.price < 800 || p.price > 1200)) return false;
+            if(priceVal === 'over1200' && p.price <= 1200) return false;
+
+            return true;
+        });
+
+        // 2. 排序
+        if(sortVal === 'priceAsc') {
+            filtered.sort((a,b) => a.price - b.price);
+        } else if(sortVal === 'priceDesc') {
+            filtered.sort((a,b) => b.price - a.price);
+        }
+
+        renderProperties(filtered);
+    }
+
+    if(searchInput) searchInput.addEventListener('input', applyFilters);
+    if(priceFilter) priceFilter.addEventListener('change', applyFilters);
+    if(statusFilter) statusFilter.addEventListener('change', applyFilters);
+    if(sortSelect) sortSelect.addEventListener('change', applyFilters);
+
+    // Initial render
+    applyFilters();
 
     function highlighCard(id) {
         document.querySelectorAll('.property-card').forEach(c => c.classList.remove('active'));
